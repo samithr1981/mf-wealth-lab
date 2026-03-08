@@ -15,7 +15,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from engine.portfolio_builder import build_portfolio, RISK_PROFILES
+from engine.portfolio_builder import build_portfolio, RISK_PROFILES, compare_fund_filters, VALID_FUND_FILTERS
 from engine.simulator import run_simulation
 from engine.wealth_outcomes import compute_outcomes
 
@@ -67,6 +67,21 @@ with st.sidebar:
         target_corpus = target_cr * 1e7
 
     st.divider()
+    st.subheader("🔬 Fund Filter")
+    fund_filter = st.select_slider(
+        "Max funds per asset class",
+        options=[3, 5, 7, 10],
+        value=5,
+        help="Controls how many top-ranked funds are selected per asset class (Equity / Hybrid / Debt / Passive)"
+    )
+    st.caption({
+        3:  "⚡ Top 3 — concentrated, high-conviction",
+        5:  "✅ Top 5 — balanced (recommended)",
+        7:  "📊 Top 7 — broader diversification",
+        10: "🌐 Top 10 — maximum spread",
+    }[fund_filter])
+
+    st.divider()
     n_sims = st.select_slider("Simulations", [1000, 5000, 10000, 25000, 50000], 10000)
     run_btn = st.button("🚀 Run Simulation", use_container_width=True, type="primary")
 
@@ -108,7 +123,8 @@ if not run_btn:
 
 # ── Run simulation ─────────────────────────────────────────────────────────────
 with st.spinner("Running 10,000 simulations..."):
-    portfolio = build_portfolio(risk_profile=risk_profile, custom_allocation=custom_alloc)
+    portfolio = build_portfolio(risk_profile=risk_profile, custom_allocation=custom_alloc,
+                                fund_filter=fund_filter)
     sim = run_simulation(
         sip=sip,
         years=years,
@@ -216,19 +232,35 @@ milestones_display.index = milestones_display["Year"]
 milestones_display = milestones_display.drop(columns=["Year"])
 st.dataframe(milestones_display.style.format("{:.2f}"), use_container_width=True)
 
+# ── Fund filter comparison ────────────────────────────────────────────────────
+with st.expander("📊 Compare all fund filter levels (3 / 5 / 7 / 10)", expanded=False):
+    st.caption("How does changing the number of funds affect return and volatility?")
+    cmp_df = compare_fund_filters(risk_profile, custom_alloc)
+    # Highlight the currently selected filter row
+    def highlight_selected(row):
+        color = "background-color: #1a4a7a; color: white" if row["Fund Filter"] == fund_filter else ""
+        return [color] * len(row)
+    st.dataframe(
+        cmp_df.style.apply(highlight_selected, axis=1),
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.caption(f"Currently selected: **Top {fund_filter}** (highlighted above)")
+
 # ── Top funds ─────────────────────────────────────────────────────────────────
 st.subheader("Funds in Your Portfolio")
 if len(portfolio.top_funds) > 0:
     display_cols = ["Scheme Name", "Category Name", "Asset_Class",
-                    "Return_Used", "Vol_Used", "Composite_Score", "Portfolio_Weight"]
+                    "AuM (Cr)", "Return_Used", "Vol_Used", "Composite_Score", "Portfolio_Weight"]
     display_cols = [c for c in display_cols if c in portfolio.top_funds.columns]
     df_show = portfolio.top_funds[display_cols].copy()
-    df_show["Return_Used"] = df_show["Return_Used"].map("{:.1%}".format)
-    df_show["Vol_Used"]    = df_show["Vol_Used"].map("{:.1%}".format)
+    df_show["Return_Used"]      = df_show["Return_Used"].map("{:.1%}".format)
+    df_show["Vol_Used"]         = df_show["Vol_Used"].map("{:.1%}".format)
     df_show["Portfolio_Weight"] = df_show["Portfolio_Weight"].map("{:.2%}".format)
+    df_show["AuM (Cr)"]         = df_show["AuM (Cr)"].map("₹{:,.0f} Cr".format)
     st.dataframe(df_show.rename(columns={
         "Return_Used": "Exp. Return", "Vol_Used": "Volatility",
-        "Portfolio_Weight": "Weight"
+        "Portfolio_Weight": "Weight", "AuM (Cr)": "AUM (₹ Cr)"
     }), use_container_width=True)
 
 # ── Download ───────────────────────────────────────────────────────────────────
