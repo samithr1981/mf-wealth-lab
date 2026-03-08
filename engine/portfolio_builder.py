@@ -204,3 +204,23 @@ if __name__ == "__main__":
         df_show["Vol_Used"]         = df_show["Vol_Used"].map("{:.1%}".format)
         df_show["Portfolio_Weight"] = df_show["Portfolio_Weight"].map("{:.2%}".format)
         print(df_show.to_string(index=False))
+
+VALID_FUND_FILTERS = [3, 5, 7, 10]
+
+def compare_fund_filters(risk_profile="Moderate", custom_allocation=None):
+    import pandas as pd
+    rows = []
+    for ff in VALID_FUND_FILTERS:
+        p = build_portfolio(risk_profile, custom_allocation, fund_filter=ff)
+        ac = p.top_funds.groupby("Asset_Class")["Scheme Name"].count().to_dict()
+        rows.append({
+            "Fund Filter": ff,
+            "Total Funds": len(p.top_funds),
+            "Equity Funds": ac.get("Equity", 0),
+            "Hybrid Funds": ac.get("Hybrid", 0),
+            "Debt Funds": ac.get("Debt", 0),
+            "Passive Funds": ac.get("Passive", 0),
+            "Exp. Return": f"{p.expected_return:.2%}",
+            "Volatility": f"{p.volatility:.2%}",
+        })
+    return pd.DataFrame(rows)
